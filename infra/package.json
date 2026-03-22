@@ -1,0 +1,37 @@
+{
+  "name": "infra",
+  "version": "1.0.0",
+  "main": "main.js",
+  "types": "main.ts",
+  "license": "MPL-2.0",
+  "private": true,
+  "scripts": {
+    "get": "cdktn get",
+    "build": "tsc",
+    "synth": "cdktn synth",
+    "compile": "tsc --pretty",
+    "watch": "tsc -w",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "upgrade": "npm i cdktn@latest cdktn-cli@latest",
+    "upgrade:next": "npm i cdktn@next cdktn-cli@next",
+    "deploy": "cdktn deploy infra"
+  },
+  "engines": {
+    "node": ">=20.9"
+  },
+  "dependencies": {
+    "@cdktn/provider-azurerm": "15.5.0",
+    "@microsoft/terraform-cdk-constructs": "^1.9.0",
+    "cdktn": "^0.22.0",
+    "constructs": "^10.5.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.5.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
