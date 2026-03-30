@@ -52,7 +52,27 @@ window.onload = () => {
         });
     }
 
+    initSourcesTabs();
+    fetchSources();
+    const refreshSourcesBtn = document.getElementById('refreshSourcesBtn');
+    if (refreshSourcesBtn) {
+        refreshSourcesBtn.addEventListener('click', fetchSources);
+    }
+
+    initSourcesToggle();
 };
+
+function setStatus(msg, state = 'idle') {
+    const statusEl = document.getElementById('status');
+    const colors = {
+        idle: '#ff69b4',
+        loading: '#f0a500',
+        success: '#90ee90',
+        error: '#ff4f4f',
+    };
+    statusEl.innerText = msg;
+    statusEl.style.color = colors[state] ?? colors.idle;
+}
 
 function addToQueue() {
     const inputEl = document.getElementById('inputData');
@@ -83,18 +103,32 @@ function renderQueue() {
     inputQueue.forEach((item, index) => {
         const li = document.createElement('li');
 
-        // Truncate long text for display
         const displayText = item.length > 80 ? item.substring(0, 80) + '...' : item;
         const isUrl = item.startsWith('http://') || item.startsWith('https://');
 
+        li.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px;';
         li.innerHTML = `
-            <span style="font-size: 16px;">${isUrl ? '🔗' : '📝'}</span> 
-            <span>${displayText}</span>
+            <span style="font-size:14px;">${isUrl ? '🔗' : '📝'}</span>
+            <span style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${displayText}</span>
         `;
 
         const removeBtn = document.createElement('button');
-        removeBtn.innerText = 'Remove';
-        removeBtn.className = 'danger';
+        removeBtn.innerText = '✕';
+        removeBtn.style.cssText = `
+            background: transparent;
+            border: 1px solid #ff4f4f;
+            color: #ff4f4f;
+            font-family: 'Rajdhani', sans-serif;
+            font-weight: 700;
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background 0.2s;
+        `;
+        removeBtn.onmouseover = () => removeBtn.style.background = 'rgba(255,79,79,0.15)';
+        removeBtn.onmouseleave = () => removeBtn.style.background = 'transparent';
         removeBtn.onclick = () => removeFromQueue(index);
 
         li.appendChild(removeBtn);
@@ -105,25 +139,22 @@ function renderQueue() {
 async function extractBatch(force) {
     if (inputQueue.length === 0) return;
 
-    console.log("Extracting batch:", inputQueue);
-    const statusEl = document.getElementById('status');
-    console.log("Status element:", statusEl);
     const btn = document.getElementById('extractBtn');
-    console.log("Extract button:", btn);
-    statusEl.innerText = "⏳ Sending batch to Gemini... this might take 15-30 seconds.";
-    statusEl.style.color = "#d69e2e";
+    setStatus('⏳ Sending batch to Gemini... this might take 15-30 seconds.', 'loading');
     btn.disabled = true;
+    btn.style.opacity = '0.5';
 
     const urls = inputQueue.filter(i => i.startsWith("http"));
-    console.log("URLs to extract:", urls);
     const texts = inputQueue.filter(i => !i.startsWith("http"));
-    console.log("Texts to extract:", texts);
     const payload = {
         urls: urls.length ? urls : undefined,
         text: texts.length ? texts.join("\n") : undefined,
+        ordered_sources: inputQueue.map(item => ({
+            content: item,
+            type: item.startsWith("http") ? "url" : "text",
+        })),
         force_reextract: force
     };
-    console.log("Payload for extraction:", payload);
 
     try {
         const response = await fetch(`${BASE_API_URL}/extract`, {
@@ -134,20 +165,18 @@ async function extractBatch(force) {
 
         if (!response.ok) throw new Error("Extraction failed on the server.");
 
-        statusEl.innerText = "✅ Batch extraction complete! Updating graph...";
-        statusEl.style.color = "#38a169";
-
-        // Clear the queue on success
+        setStatus('✅ Batch extraction complete! Updating graph...', 'success');
         inputQueue = [];
         renderQueue();
         await fetchGraph();
+        await fetchSources();
 
     } catch (error) {
         console.error(error);
-        statusEl.innerText = "❌ Error during batch extraction. Check console.";
-        statusEl.style.color = "#e53e3e";
+        setStatus('❌ Error during batch extraction. Check console.', 'error');
     } finally {
         btn.disabled = false;
+        btn.style.opacity = '1';
     }
 }
 
@@ -162,19 +191,21 @@ async function fetchGraph() {
 }
 
 function renderGraph(rawEdges) {
-    // 1. Extract unique nodes
     const nodeSet = new Set();
     rawEdges.forEach(edge => {
         nodeSet.add(edge.source);
         nodeSet.add(edge.target);
     });
 
-    // 2. Format nodes for Vis.js
     nodes = new vis.DataSet(
-        Array.from(nodeSet).map(name => ({ id: name, label: name, shape: "dot", size: 20 }))
+        Array.from(nodeSet).map(name => ({
+            id: name,
+            label: name,
+            shape: "dot",
+            size: 18,
+        }))
     );
 
-    // 3. Format edges for Vis.js
     edges = new vis.DataSet(
         rawEdges.map((edge, index) => ({
             id: index,
@@ -182,11 +213,10 @@ function renderGraph(rawEdges) {
             to: edge.target,
             label: edge.relation,
             arrows: "to",
-            font: { align: "middle" }
+            font: { align: "middle", color: '#fff', size: 11, face: 'Space Mono' }
         }))
     );
 
-    // 4. Draw the network
     const container = document.getElementById('mynetwork');
     const data = { nodes, edges };
     const options = {
@@ -195,24 +225,33 @@ function renderGraph(rawEdges) {
         },
         nodes: {
             color: {
-                background: '#fbb6ce', // Light pink fill
-                border: '#d53f8c',     // Hot pink border
-                highlight: { background: '#f687b3', border: '#97266d' } // Darker when clicked
+                background: '#2e2e2e',
+                border: '#ff69b4',
+                highlight: { background: '#3a2030', border: '#ff69b4' },
+                hover: { background: '#3a2030', border: '#ff9fd0' },
             },
-            font: { size: 14, face: 'Tahoma', color: '#4a0531' }, // Dark plum text
-            borderWidth: 2
+            font: { size: 13, face: 'Space Mono', color: '#ff69b4' },
+            borderWidth: 2,
+            borderWidthSelected: 3,
+            shadow: { enabled: true, color: 'rgba(255,105,180,0.35)', size: 12, x: 0, y: 0 },
         },
         edges: {
             color: {
-                color: '#f687b3',      // Soft pink lines
-                highlight: '#d53f8c'   // Hot pink when connected node is clicked
+                color: '#3a3a3a',
+                highlight: '#ff69b4',
+                hover: '#c4507f',
             },
-            smooth: { type: 'continuous' }
-        }
+            smooth: { type: 'continuous' },
+            width: 1.5,
+            font: {
+                strokeWidth: 0
+            },
+        },
+        interaction: { hover: true },
     };
 
     if (network !== null) {
-        network.destroy(); // clear old graph
+        network.destroy();
     }
     network = new vis.Network(container, data, options);
 }
@@ -238,12 +277,13 @@ async function askQuestion() {
 
     const answerBox = document.getElementById('answerBox');
     const answerText = document.getElementById('answerText');
-    const contextNodesText = document.getElementById('contextNodes');
+    const nodesContainer = document.getElementById('contextNodes');
+    const edgesContainer = document.getElementById('contextEdges');
 
     answerBox.style.display = 'block';
-    // Tailwind natively provides animate-pulse for loading!
-    answerText.innerHTML = "<span class='text-purple-600 animate-pulse font-medium'>⏳ Extracting entities & running PageRank...</span>";
-    contextNodesText.innerText = "";
+    answerText.innerHTML = `<span style="color:#f0a500; font-family:'Space Mono',monospace; font-size:0.85rem;">⏳ Extracting entities &amp; running PageRank...</span>`;
+    nodesContainer.innerHTML = "";
+    edgesContainer.innerHTML = "";
 
     try {
         const res = await fetch(`${BASE_API_URL}/ask`, {
@@ -256,16 +296,50 @@ async function askQuestion() {
 
         const data = await res.json();
 
-        // 1. Display the synthesized answer
         answerText.innerText = data.answer;
+        answerText.style.cssText = "color:#c8c8c8; font-family:'Space Mono',monospace; font-size:0.85rem; line-height:1.7;";
 
-        // 2. Display the nodes that were used as context
-        contextNodesText.innerHTML = `<strong>Context Nodes Used:</strong> ${data.top_nodes.join(', ')}`;
+        // Top nodes as neon pills
+        nodesContainer.innerHTML = `
+            <div style="margin-bottom:6px; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; color:#555;">
+                Top Nodes
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+                ${data.top_nodes.map(node => `
+                    <span style="
+                        display:inline-block;
+                        background:rgba(255,105,180,0.08);
+                        border:1px solid rgba(255,105,180,0.35);
+                        color:#ff69b4;
+                        font-family:'Space Mono',monospace;
+                        font-size:0.72rem;
+                        padding:3px 10px;
+                        border-radius:4px;
+                    ">${node.node} <span style="color:#c4507f;">${node.score.toFixed(4)}</span></span>
+                `).join('')}
+            </div>
+        `;
 
-        // 3. Make the graph VISUALLY light up!
-        highlightNodes(data.top_nodes);
+        // Context edges as a monospace list
+        edgesContainer.innerHTML = `
+            <div style="margin:12px 0 6px; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:0.7rem; letter-spacing:0.1em; text-transform:uppercase; color:#555;">
+                Context Edges
+            </div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                ${data.context_used.map(edge => `
+                    <div style="font-family:'Space Mono',monospace; font-size:0.75rem; color:#666;">
+                        <span style="color:#ccc;">${edge.source}</span>
+                        <span style="color:#ff69b4; margin:0 6px;">[${edge.relation}]</span>
+                        <span style="color:#ccc;">${edge.target}</span>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+        highlightNodes(data.top_nodes.map(n => n.node));
 
     } catch (e) {
+        answerText.style.color = '#ff4f4f';
         answerText.innerText = `❌ Error: ${e.message || "Failed to get answer."}`;
     }
 }
@@ -273,24 +347,129 @@ async function askQuestion() {
 function highlightNodes(winningNodeIds) {
     if (!nodes) return;
 
-    // Step 1: Dim ALL nodes to a light grey color
+    // Dim all nodes to dark/muted
     const allNodes = nodes.get().map(node => ({
         id: node.id,
-        color: { background: '#f1f5f9', border: '#cbd5e1' }, // Tailwind Slate-100 / Slate-300
+        color: {
+            background: '#252525',
+            border: '#3a3a3a',
+        },
         size: 10,
-        font: { color: '#94a3b8' } // Tailwind Slate-400
+        font: { color: '#444', size: 11 },
+        shadow: { enabled: false },
     }));
 
-    // Step 2: Enlarge and highlight the specific PageRank winners
+    // Highlight PageRank winners in neon green
     winningNodeIds.forEach(id => {
         const nodeIndex = allNodes.findIndex(n => n.id === id);
         if (nodeIndex !== -1) {
-            allNodes[nodeIndex].color = { background: '#fef08a', border: '#eab308' }; // Bright Yellow
-            allNodes[nodeIndex].size = 35;
-            allNodes[nodeIndex].font = { color: '#854d0e', size: 18, bold: true };
+            allNodes[nodeIndex].color = {
+                background: '#1a2e1a',
+                border: '#90ee90',
+            };
+            allNodes[nodeIndex].size = 32;
+            allNodes[nodeIndex].font = { color: '#90ee90', size: 15, face: 'Space Mono' };
+            allNodes[nodeIndex].shadow = { enabled: true, color: 'rgba(144,238,144,0.5)', size: 16, x: 0, y: 0 };
         }
     });
 
-    // Push updates to the visualization
     nodes.update(allNodes);
+}
+
+let allSources = [];
+let activeTab = 'all';
+
+function initSourcesToggle() {
+    const toggle = document.getElementById('sourcesToggle');
+    const sidebar = document.getElementById('sourcesPanel');
+    if (!toggle || !sidebar) return;
+
+    let collapsed = false;
+
+    toggle.addEventListener('click', () => {
+        collapsed = !collapsed;
+        sidebar.classList.toggle('collapsed', collapsed);
+        toggle.classList.toggle('collapsed', collapsed);
+        // Flip arrow direction
+        toggle.textContent = collapsed ? '▶' : '◀';
+        // Reposition toggle: when collapsed it hugs the right edge of graphRow
+        toggle.style.right = collapsed ? '-1px' : 'calc(300px - 1px)';
+        // Let vis.js re-fit after the transition
+        setTimeout(() => { if (network) network.redraw(); }, 320);
+    });
+}
+
+async function fetchSources() {
+    const list = document.getElementById('sourcesList');
+    const empty = document.getElementById('sourcesEmpty');
+    list.innerHTML = `<div style="font-size:.72rem;color:#ff69b455;text-align:center;padding:16px 0;">Loading sources...</div>`;
+    empty.style.display = 'none';
+
+    try {
+        const res = await fetch(`${BASE_API_URL}/sources`);
+        if (!res.ok) throw new Error(res.statusText);
+        const sourcesJson = await res.json();
+        allSources = sourcesJson.sources;
+        renderSources();
+    } catch (e) {
+        list.innerHTML = `<div style="font-size:.72rem;color:#ff4f4f;text-align:center;padding:16px 0;">❌ Failed to load sources: ${e.message}</div>`;
+    }
+}
+
+function renderSources() {
+    const list = document.getElementById('sourcesList');
+    const empty = document.getElementById('sourcesEmpty');
+
+    const filtered = allSources.filter(s => {
+        if (activeTab === 'url') return s.type === 'url';
+        if (activeTab === 'text') return s.type === 'text';
+        return true;
+    });
+
+    if (filtered.length === 0) {
+        list.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+    }
+    empty.style.display = 'none';
+
+    list.innerHTML = filtered.map((s, i) => {
+        const isUrl = s.type === 'url';
+        const label = isUrl ? s.content : `Text snippet #${i + 1}`;
+        const preview = s.text || s.content || '';
+        const trimmed = preview.length > 200 ? preview.slice(0, 200) + '…' : preview;
+        const meta = [
+            isUrl ? 'URL' : 'Text',
+            s.node_count != null ? `${s.node_count} nodes` : null,
+            s.edge_count != null ? `${s.edge_count} edges` : null,
+            s.created_at ? new Date(s.created_at).toLocaleString() : null,
+        ].filter(Boolean).join('  ·  ');
+
+        return `
+        <div class="source-card">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    ${isUrl
+                ? `<a href="${s.content}" target="_blank" rel="noopener" class="source-url hover:underline">${label}</a>`
+                : `<span class="source-url">${label}</span>`
+            }
+                    ${!isUrl && trimmed ? `<p class="source-text mt-1 mb-0">${trimmed}</p>` : ''}
+                    <div class="source-meta">${meta}</div>
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function initSourcesTabs() {
+    document.querySelectorAll('.sources-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            activeTab = btn.dataset.tab;
+            document.querySelectorAll('.sources-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderSources();
+        });
+    });
+    // Set initial active state
+    document.querySelector('.sources-tab[data-tab="all"]').classList.add('active');
 }

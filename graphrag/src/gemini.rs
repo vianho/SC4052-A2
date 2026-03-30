@@ -88,12 +88,11 @@ pub async fn text_query(prompt: &str, system_instruction: &str, api_key: &str, r
             }],
         }],
         tools: None,
-        system_instruction: None,
-        // system_instruction: Some(GeminiContent {
-        //     parts: vec![GeminiPart {
-        //         text: system_instruction.to_string(),
-        //     }],
-        // }),
+        system_instruction: Some(GeminiContent {
+            parts: vec![GeminiPart {
+                text: system_instruction.to_string(),
+            }],
+        }),
         generation_config,
     };
 

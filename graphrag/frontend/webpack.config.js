@@ -4,12 +4,21 @@
 const api_url = process.env.BASE_API_URL || "http://localhost:3000/api";
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 
 module.exports = {
     entry: './index.js',
     output: {
         path: path.resolve(__dirname, "./dist"),
         filename: "index_bundle.js",
+    },
+    module: {
+        rules: [
+            {
+                test: /\.css$/i,
+                use: [MiniCssExtractPlugin.loader, 'css-loader'],
+            },
+        ],
     },
     plugins: [
         new HtmlWebpackPlugin({
@@ -18,6 +27,10 @@ module.exports = {
             templateParameters: {
                 apiUrl: api_url,
             },
+        }),
+        new MiniCssExtractPlugin({
+            filename: '[name].css',
+            chunkFilename: '[id].css',
         }),
     ],
 }

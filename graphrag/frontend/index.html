@@ -6,95 +6,155 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GraphRAG Explorer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Include Vis.js for Network Graphing -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap"
+        rel="stylesheet">
     <script>
         window.BASE_API_URL = "<%= apiUrl %>";
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        neon: '#ff69b4',
+                        lime: '#90ee90',
+                        dark: '#1e1e1e',
+                        panel: '#2e2e2e',
+                    },
+                    fontFamily: {
+                        mono: ['Space Mono', 'monospace'],
+                        display: ['Syne', 'sans-serif'],
+                    },
+                }
+            }
+        }
     </script>
+
 </head>
 
-<body class="bg-pink-50 text-pink-950 font-sans p-4 md:p-8 m-0">
-    <div class="max-w-6xl mx-auto flex flex-col gap-6">
+<body class="p-4 md:p-8 m-0 min-h-screen">
+    <div class="max-w-6xl mx-auto flex flex-col gap-5">
 
         <!-- Top Panel: Graph Builder -->
-        <div class="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-pink-200">
-            <h1 class="text-3xl font-bold text-pink-800 mb-1">🌸 GraphRAG Studio</h1>
-            <p class="text-pink-800/80 mb-6">Dynamically extract knowledge from URLs or text.</p>
-
-            <div class="flex flex-col sm:flex-row gap-3 mb-5 items-center">
-                <input type="text" id="inputData" placeholder="Enter a URL (e.g., Wikipedia link) or raw text..."
-                    class="flex-grow w-full p-3 border-2 border-pink-200 rounded-lg text-base outline-none transition-colors focus:border-pink-500 focus:ring-2 focus:ring-pink-200">
-                <button id="addToQueueBtn"
-                    class="w-full sm:w-auto px-6 py-3 bg-pink-500 text-white rounded-lg text-base font-semibold hover:bg-pink-600 transition-all hover:-translate-y-0.5 shadow-sm">
-                    Queue Data
-                </button>
+        <div class="panel p-6 md:p-8">
+            <!-- Header -->
+            <div class="flex items-start justify-between mb-6">
+                <div>
+                    <div class="flex items-center gap-3 mb-1">
+                        <span class="neon-text text-2xl font-display font-extrabold tracking-tight"
+                            style="font-family:'Syne',sans-serif;">◈ GraphRAG Studio</span>
+                    </div>
+                    <p class="text-xs muted-neon mt-1">// extract &amp; visualize knowledge graphs from any source</p>
+                </div>
+                <span class="tag" style="background:#ff69b415;color:#ff69b4;border:1px solid #ff69b440;">v2.0</span>
             </div>
 
-            <div class="bg-pink-50/50 border-2 border-dashed border-pink-300 p-5 rounded-xl mb-5" id="stagingArea"
-                style="display: none;">
-                <h4 class="mt-0 mb-3 text-pink-600 font-semibold">Pending Ingestion:</h4>
-                <ul class="list-none p-0 m-0 mb-4 max-h-40 overflow-y-auto" id="stagingList"></ul>
+            <!-- Input row -->
+            <div class="flex flex-col sm:flex-row gap-3 mb-5">
+                <input type="text" id="inputData" placeholder="Enter a URL (e.g. Wikipedia) or raw text...">
+                <button id="addToQueueBtn" class="btn btn-neon-solid whitespace-nowrap">+ Queue Data</button>
+            </div>
+
+            <!-- Staging area -->
+            <div id="stagingArea" class="p-5 mb-5" style="display:none;">
+                <h4 class="text-xs uppercase tracking-widest muted-neon mb-3 mt-0">▸ Pending Ingestion</h4>
+                <ul class="p-0 m-0 mb-4 max-h-40 overflow-y-auto" id="stagingList"></ul>
                 <div class="flex gap-3">
-                    <button id="extractBtn"
-                        class="flex-grow px-6 py-3 bg-pink-500 text-white rounded-lg font-semibold hover:bg-pink-600 transition-all shadow-sm">
-                        🚀 Extract & Build Graph
-                    </button>
-                    <button id="forceExtractBtn" title="Bypass cache to find missing facts"
-                        class="px-6 py-3 bg-pink-800 text-white rounded-lg font-semibold hover:bg-pink-900 transition-all shadow-sm">
-                        🔍 Deep Extraction
-                    </button>
+                    <button id="extractBtn" class="btn btn-neon-solid flex-grow">🚀 Extract &amp; Build Graph</button>
+                    <button id="forceExtractBtn" title="Bypass cache to find missing facts" class="btn btn-neon">🔍 Deep
+                        Extraction</button>
                 </div>
             </div>
 
-            <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mt-2">
-                <button id="refreshBtn"
-                    class="px-5 py-2.5 bg-pink-800 text-white rounded-lg text-sm font-semibold hover:bg-pink-900 transition-colors">
-                    🔄 Refresh Graph
-                </button>
+            <!-- Actions row -->
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2 border-t"
+                style="border-color:#ff69b420;">
+                <button id="refreshBtn" class="btn btn-neon text-xs">⟳ Refresh Graph</button>
                 <div class="flex gap-3">
-                    <button id="exportJsonBtn"
-                        class="px-5 py-2.5 bg-pink-600 text-white rounded-lg text-sm font-semibold hover:bg-pink-700 transition-colors">
-                        📥 Export JSON
-                    </button>
-                    <button id="exportCsvBtn"
-                        class="px-5 py-2.5 bg-pink-800 text-white rounded-lg text-sm font-semibold hover:bg-pink-900 transition-colors">
-                        📥 Export CSV
-                    </button>
+                    <button id="exportJsonBtn" class="btn btn-neon text-xs">↓ Export JSON</button>
+                    <button id="exportCsvBtn" class="btn btn-neon text-xs">↓ Export CSV</button>
                 </div>
             </div>
-            <div id="status" class="mt-4 font-bold text-pink-600 text-sm">System Ready.</div>
+
+            <div id="status" class="mt-4">System Ready.</div>
         </div>
 
-        <!-- Middle Panel: Visualization -->
-        <div class="bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-pink-200">
-            <div id="mynetwork" class="w-full h-[600px] border-2 border-pink-100 rounded-xl bg-pink-50/30"></div>
+        <!-- Graph + Sidebar row -->
+        <div id="graphRow">
+
+            <!-- Collapse toggle button -->
+            <button id="sourcesToggle" title="Toggle sources panel">◀</button>
+
+            <!-- Graph Panel -->
+            <div class="panel p-3 md:p-4" id="graphPanel">
+                <div class="flex items-center gap-2 px-1 pb-3">
+                    <span class="inline-block w-2 h-2 rounded-full"
+                        style="background:#ff69b4;box-shadow:0 0 6px #ff69b4;"></span>
+                    <span class="text-xs uppercase tracking-widest muted-neon">Knowledge Graph</span>
+                </div>
+                <div id="mynetwork" class="w-full" style="height:580px;"></div>
+            </div>
+
+            <!-- Sources Sidebar -->
+            <div class="panel p-4" id="sourcesPanel">
+                <!-- Header -->
+                <div class="flex items-center justify-between mb-4" style="min-width:220px;">
+                    <div>
+                        <span class="neon-text font-extrabold tracking-tight"
+                            style="font-family:'Syne',sans-serif;font-size:1rem;">◈ Sources</span>
+                        <p class="text-xs muted-neon mt-0.5 mb-0">// URLs &amp; text blobs</p>
+                    </div>
+                    <button id="refreshSourcesBtn" class="btn btn-neon"
+                        style="padding:5px 9px;font-size:.65rem;">⟳</button>
+                </div>
+
+                <!-- Filter tabs -->
+                <div class="flex gap-1.5 mb-3" id="sourcesTabs" style="min-width:220px;">
+                    <button class="sources-tab btn btn-neon-solid" data-tab="all"
+                        style="padding:5px 9px;font-size:.65rem;">All</button>
+                    <button class="sources-tab btn btn-neon" data-tab="url" style="padding:5px 9px;font-size:.65rem;">🔗
+                        URL</button>
+                    <button class="sources-tab btn btn-neon" data-tab="text"
+                        style="padding:5px 9px;font-size:.65rem;">📝 Text</button>
+                </div>
+
+                <!-- Sources list -->
+                <div id="sourcesList" class="flex flex-col gap-2 pr-0.5"
+                    style="overflow-y:auto;max-height:490px;min-width:220px;">
+                    <div class="text-xs muted-neon py-4 text-center">Loading sources...</div>
+                </div>
+                <div id="sourcesEmpty" class="text-xs muted-neon py-6 text-center"
+                    style="display:none;min-width:220px;">No sources yet.</div>
+            </div>
+
         </div>
 
         <!-- Bottom Panel: Ask Questions (RAG) -->
-        <div class="bg-purple-50 border-2 border-purple-200 p-6 md:p-8 rounded-2xl shadow-sm">
-            <h3 class="text-2xl font-bold text-purple-800 mb-1">💬 Ask the Graph</h3>
-            <p class="text-purple-800/80 mb-6">The PageRank algorithm will find the mathematical path to your answer!
-            </p>
-
-            <!-- Query Input Box -->
-            <div class="flex flex-col sm:flex-row gap-3 items-center">
-                <input type="text" id="questionInput" placeholder="e.g., What discoveries did Marie Curie make?"
-                    class="flex-grow w-full p-3 border-2 border-purple-200 rounded-lg text-base outline-none transition-colors focus:border-purple-500 focus:ring-2 focus:ring-purple-200">
-                <button id="askQuestionBtn"
-                    class="w-full sm:w-auto px-6 py-3 bg-purple-600 text-white rounded-lg text-base font-semibold hover:bg-purple-700 transition-all hover:-translate-y-0.5 shadow-sm">
-                    Ask AI ✨
-                </button>
+        <div class="panel-green p-6 md:p-8">
+            <!-- Header -->
+            <div class="mb-6">
+                <div class="flex items-center gap-3 mb-1">
+                    <span class="green-text text-2xl font-extrabold tracking-tight"
+                        style="font-family:'Syne',sans-serif;">◇ Ask the Graph</span>
+                </div>
+                <p class="text-xs muted-green mt-1">// PageRank finds the mathematical path to your answer</p>
             </div>
 
-            <!-- Response UI -->
-            <div id="answerBox" class="mt-6 p-6 bg-white rounded-xl border-l-4 border-purple-600 shadow-sm"
-                style="display: none;">
-                <strong class="text-purple-800 text-lg">AI Answer:</strong>
-                <p id="answerText" class="mt-3 mb-0 leading-relaxed text-gray-800 text-base"></p>
-                <hr class="border-t border-purple-100 my-4">
-                <p id="contextNodes" class="m-0 text-sm text-purple-600 italic"></p>
+            <!-- Query row -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <input type="text" id="questionInput" placeholder="e.g., What discoveries did Marie Curie make?">
+                <button id="askQuestionBtn" class="btn btn-green-solid whitespace-nowrap">Ask AI ✦</button>
+            </div>
+
+            <!-- Response box -->
+            <div id="answerBox" class="mt-6 p-5 rounded-xl" style="display:none;">
+                <strong class="text-xs uppercase tracking-widest green-text">◈ AI Answer</strong>
+                <p id="answerText" class="mt-3 mb-0"></p>
+                <hr class="my-4">
+                <div id="contextNodes" class="mt-2"></div>
+                <div id="contextEdges" class="mt-2"></div>
             </div>
         </div>
+
     </div>
 </body>
 

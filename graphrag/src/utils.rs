@@ -1,4 +1,4 @@
-use crate::models::ExtractedEdge;
+use crate::models::{ExtractedEdge, NodeScore};
 use std::collections::{HashMap, HashSet};
 use strsim::jaro_winkler;
 
@@ -43,7 +43,7 @@ pub fn run_personalized_pagerank(
     edges: &Vec<ExtractedEdge>,
     seeds: &HashSet<String>,
     iterations: usize,
-) -> Vec<(String, f64)> {
+) -> Vec<NodeScore> {
     let damping = 0.85;
     let mut nodes = HashSet::new();
     let mut adjacency: HashMap<String, Vec<String>> = HashMap::new();
@@ -119,7 +119,10 @@ pub fn run_personalized_pagerank(
     }
 
     // 4. Sort results
-    let mut ranked: Vec<(String, f64)> = scores.into_iter().collect();
-    ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    let mut ranked: Vec<NodeScore> = scores
+        .into_iter()
+        .map(|(node, score)| NodeScore { node, score })
+        .collect();
+    ranked.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
     ranked
 }

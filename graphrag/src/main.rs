@@ -8,7 +8,6 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use serde::{Deserialize, Serialize};
 use std::env;
 use std::sync::{Arc, Mutex};
 use tower_http::cors::{Any, CorsLayer};
@@ -16,20 +15,7 @@ use dotenv::dotenv;
 use std::collections::{HashSet};
 
 use crate::models::{AppState, SharedAppState};
-use crate::handlers::{get_current_graph, handle_extraction, handle_ask};
-
-#[derive(Deserialize)]
-pub struct ExtractRequest {
-    pub urls: Option<Vec<String>>,
-    pub text: Option<Vec<String>>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct ExtractedEdge {
-    pub source: String,
-    pub target: String,
-    pub relation: String,
-}
+use crate::handlers::{get_current_graph, handle_extraction, handle_ask, handle_get_sources};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
@@ -41,6 +27,8 @@ async fn main() {
     let shared_state: SharedAppState = Arc::new(Mutex::new(AppState {
         edges: Vec::new(),
         visited_urls: HashSet::new(),
+        texts_processed: Vec::new(),
+        ordered_sources: Vec::new(),
         api_key,
     }));
 
@@ -54,6 +42,7 @@ async fn main() {
         .route("/api/graph", get(get_current_graph)) 
         .route("/api/extract", post(handle_extraction))
         .route("/api/ask", post(handle_ask))
+        .route("/api/sources", get(handle_get_sources))
         .route("/api", get(|| async { "Welcome to the Rust GraphRAG API! Use /api/extract to extract and /api/graph to view the accumulated graph." }))
         .layer(cors)
         .with_state(shared_state);
