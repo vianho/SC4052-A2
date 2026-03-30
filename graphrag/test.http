@@ -1,0 +1,49 @@
+# VS Code REST Client Configuration
+
+# Test base url
+GET {{baseUrl}}/
+
+### =========================================
+### 1. Get Current Graph State
+### =========================================
+# Fetches all the edges currently loaded in the backend memory.
+GET {{baseUrl}}/graph
+
+### =========================================
+### 2. Extract Graph from URLs
+### =========================================
+# Instructs Gemini to visit the URL, read the content, and extract structural edges.
+POST {{baseUrl}}/extract
+Content-Type: application/json
+
+{
+    "urls": [
+        "https://en.wikipedia.org/wiki/Marie_Curie",
+        "https://en.wikipedia.org/wiki/Pierre_Curie"
+    ],
+    "force_reextract": false
+}
+
+
+### =========================================
+### 3. Extract Graph from Raw Text
+### =========================================
+# Instructs Gemini to extract structural edges directly from a provided text payload.
+POST {{baseUrl}}/extract
+Content-Type: application/json
+
+{
+    "text": "Albert Einstein developed the theory of relativity. He was born in Ulm, Germany and won the Nobel Prize in Physics."
+}
+
+
+### =========================================
+### 4. Ask the Graph (GraphRAG Query)
+### =========================================
+# Runs the LLM Entity Extraction -> Personalized PageRank -> LLM Synthesis pipeline.
+POST {{baseUrl}}/ask
+Content-Type: application/json
+
+{
+    "question": "What major discoveries did the Curies make?"
+}

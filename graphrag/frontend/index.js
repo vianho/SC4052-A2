@@ -1,8 +1,11 @@
 import './styles.css';
 
 const BASE_API_URL = window.BASE_API_URL || 'http://localhost:3000/api';
+let nodes = [];
+let edges = [];
 let network = null;
 let inputQueue = [];
+let currentGraphData = [];
 
 
 window.onload = () => {
@@ -10,7 +13,9 @@ window.onload = () => {
 
     const inputEl = document.getElementById('inputData');
     if (inputEl) {
-        inputEl.addEventListener('keyup', handleKeyPress);
+        inputEl.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') addToQueue();
+        });
     }
     const addToQueueBtn = document.getElementById('addToQueueBtn');
     if (addToQueueBtn) {
@@ -18,7 +23,11 @@ window.onload = () => {
     }
     const extractBtn = document.getElementById('extractBtn');
     if (extractBtn) {
-        extractBtn.addEventListener('click', extractBatch);
+        extractBtn.addEventListener('click', () => extractBatch(false));
+    }
+    const forceExtractBtn = document.getElementById('forceExtractBtn');
+    if (forceExtractBtn) {
+        forceExtractBtn.addEventListener('click', () => extractBatch(true));
     }
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
@@ -32,12 +41,18 @@ window.onload = () => {
     if (exportCsvBtn) {
         exportCsvBtn.addEventListener('click', exportCSV);
     }
+    const askQuestionBtn = document.getElementById('askQuestionBtn');
+    if (askQuestionBtn) {
+        askQuestionBtn.addEventListener('click', askQuestion);
+    }
+    const questionInput = document.getElementById('questionInput');
+    if (questionInput) {
+        questionInput.addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') askQuestion();
+        });
+    }
 
 };
-
-function handleKeyPress(e) {
-    if (e.key === 'Enter') addToQueue();
-}
 
 function addToQueue() {
     const inputEl = document.getElementById('inputData');
@@ -87,28 +102,31 @@ function renderQueue() {
     });
 }
 
-async function extractBatch() {
+async function extractBatch(force) {
     if (inputQueue.length === 0) return;
 
+    console.log("Extracting batch:", inputQueue);
     const statusEl = document.getElementById('status');
+    console.log("Status element:", statusEl);
     const btn = document.getElementById('extractBtn');
+    console.log("Extract button:", btn);
     statusEl.innerText = "⏳ Sending batch to Gemini... this might take 15-30 seconds.";
     statusEl.style.color = "#d69e2e";
     btn.disabled = true;
 
-    // Separate the queue into URLs and Texts
-    const urls = inputQueue.filter(item => item.startsWith("http://") || item.startsWith("https://"));
-    const texts = inputQueue.filter(item => !item.startsWith("http://") && !item.startsWith("https://"));
-
-    // Build the payload
-    const payload = {};
-    if (urls.length > 0) payload.urls = urls;
-
-    // Combine all text snippets into one giant string with spacing
-    if (texts.length > 0) payload.text = texts.join("\n\n---\n\n");
+    const urls = inputQueue.filter(i => i.startsWith("http"));
+    console.log("URLs to extract:", urls);
+    const texts = inputQueue.filter(i => !i.startsWith("http"));
+    console.log("Texts to extract:", texts);
+    const payload = {
+        urls: urls.length ? urls : undefined,
+        text: texts.length ? texts.join("\n") : undefined,
+        force_reextract: force
+    };
+    console.log("Payload for extraction:", payload);
 
     try {
-        const response = await fetch(`${API_BASE_URL}/extract`, {
+        const response = await fetch(`${BASE_API_URL}/extract`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -122,8 +140,6 @@ async function extractBatch() {
         // Clear the queue on success
         inputQueue = [];
         renderQueue();
-
-        // Immediately fetch the updated global graph
         await fetchGraph();
 
     } catch (error) {
@@ -135,12 +151,11 @@ async function extractBatch() {
     }
 }
 
-
 async function fetchGraph() {
     try {
         const response = await fetch(`${BASE_API_URL}/graph`);
-        const edgesData = await response.json();
-        renderGraph(edgesData);
+        currentGraphData = await response.json();
+        renderGraph(currentGraphData);
     } catch (error) {
         console.error("Failed to fetch graph:", error);
     }
@@ -155,12 +170,12 @@ function renderGraph(rawEdges) {
     });
 
     // 2. Format nodes for Vis.js
-    const nodes = new vis.DataSet(
+    nodes = new vis.DataSet(
         Array.from(nodeSet).map(name => ({ id: name, label: name, shape: "dot", size: 20 }))
     );
 
     // 3. Format edges for Vis.js
-    const edges = new vis.DataSet(
+    edges = new vis.DataSet(
         rawEdges.map((edge, index) => ({
             id: index,
             from: edge.source,
@@ -203,43 +218,79 @@ function renderGraph(rawEdges) {
 }
 
 function downloadFile(content, filename, mimeType) {
-    const blob = new Blob([content], { type: mimeType });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(new Blob([content], { type: mimeType }));
     a.download = filename;
-    document.body.appendChild(a);
     a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
 }
-
 function exportJSON() {
-    if (currentGraphData.length === 0) {
-        alert("The graph is empty! Extract some knowledge first.");
-        return;
-    }
-    // Convert the Javascript object back to pretty-printed JSON
-    const jsonString = JSON.stringify(currentGraphData, null, 2);
-    downloadFile(jsonString, "knowledge_graph.json", "application/json");
+    downloadFile(JSON.stringify(currentGraphData, null, 2), "graph.json", "application/json");
+}
+function exportCSV() {
+    let csv = "Source,Relation,Target\n" + currentGraphData.map(e => `"${e.source}","${e.relation}","${e.target}"`).join("\n");
+    downloadFile(csv, "graph.csv", "text/csv");
 }
 
-function exportCSV() {
-    if (currentGraphData.length === 0) {
-        alert("The graph is empty! Extract some knowledge first.");
-        return;
+async function askQuestion() {
+    const qInput = document.getElementById('questionInput');
+    const question = qInput.value.trim();
+    if (!question) return;
+
+    const answerBox = document.getElementById('answerBox');
+    const answerText = document.getElementById('answerText');
+    const contextNodesText = document.getElementById('contextNodes');
+
+    answerBox.style.display = 'block';
+    // Tailwind natively provides animate-pulse for loading!
+    answerText.innerHTML = "<span class='text-purple-600 animate-pulse font-medium'>⏳ Extracting entities & running PageRank...</span>";
+    contextNodesText.innerText = "";
+
+    try {
+        const res = await fetch(`${BASE_API_URL}/ask`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question })
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+
+        const data = await res.json();
+
+        // 1. Display the synthesized answer
+        answerText.innerText = data.answer;
+
+        // 2. Display the nodes that were used as context
+        contextNodesText.innerHTML = `<strong>Context Nodes Used:</strong> ${data.top_nodes.join(', ')}`;
+
+        // 3. Make the graph VISUALLY light up!
+        highlightNodes(data.top_nodes);
+
+    } catch (e) {
+        answerText.innerText = `❌ Error: ${e.message || "Failed to get answer."}`;
     }
+}
 
-    // Create CSV Headers
-    let csvString = "Source,Relation,Target\n";
+function highlightNodes(winningNodeIds) {
+    if (!nodes) return;
 
-    // Loop through edges and format them safely (escaping quotes)
-    currentGraphData.forEach(edge => {
-        const src = `"${edge.source.replace(/"/g, '""')}"`;
-        const rel = `"${edge.relation.replace(/"/g, '""')}"`;
-        const tgt = `"${edge.target.replace(/"/g, '""')}"`;
-        csvString += `${src},${rel},${tgt}\n`;
+    // Step 1: Dim ALL nodes to a light grey color
+    const allNodes = nodes.get().map(node => ({
+        id: node.id,
+        color: { background: '#f1f5f9', border: '#cbd5e1' }, // Tailwind Slate-100 / Slate-300
+        size: 10,
+        font: { color: '#94a3b8' } // Tailwind Slate-400
+    }));
+
+    // Step 2: Enlarge and highlight the specific PageRank winners
+    winningNodeIds.forEach(id => {
+        const nodeIndex = allNodes.findIndex(n => n.id === id);
+        if (nodeIndex !== -1) {
+            allNodes[nodeIndex].color = { background: '#fef08a', border: '#eab308' }; // Bright Yellow
+            allNodes[nodeIndex].size = 35;
+            allNodes[nodeIndex].font = { color: '#854d0e', size: 18, bold: true };
+        }
     });
 
-    downloadFile(csvString, "knowledge_graph.csv", "text/csv");
+    // Push updates to the visualization
+    nodes.update(allNodes);
 }
