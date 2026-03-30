@@ -1,0 +1,19 @@
+{
+	"name": "graphrag-frontend",
+	"version": "1.0.0",
+	"description": "Frontend for GraphRAG Knowledge Graph Explorer",
+	"main": "index.js",
+	"scripts": {
+		"build": "webpack --mode production",
+		"start": "webpack serve --mode development --open"
+	},
+	"devDependencies": {
+		"css-loader": "^7.1.4",
+		"html-webpack-plugin": "^5.6.6",
+		"mini-css-extract-plugin": "^2.10.1",
+		"style-loader": "^4.0.0",
+		"webpack": "^5.105.4",
+		"webpack-cli": "^7.0.2",
+		"webpack-dev-server": "^5.2.3"
+	}
+}

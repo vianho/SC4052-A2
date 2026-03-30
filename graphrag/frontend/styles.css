@@ -1,0 +1,144 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #fdf2f8;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+}
+
+.container {
+    max-width: 1200px;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.panel {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(213, 63, 140, 0.08);
+    border: 1px solid #fbcfe8;
+}
+
+h1,
+h3 {
+    margin-top: 0;
+}
+
+/* Input and Staging Area Styles */
+.input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+input[type="text"] {
+    flex-grow: 1;
+    padding: 10px;
+    border: 2px solid #fbcfe8;
+    border-radius: 4px;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+input[type="text"]:focus {
+    border-color: #d53f8c;
+}
+
+/* Button Styling */
+button {
+    padding: 10px 20px;
+    background: #d53f8c;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+
+button:hover {
+    background: #b83280;
+    transform: translateY(-1px);
+}
+
+button:disabled {
+    background: #fbb6ce;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* Secondary & Utility Buttons */
+button.secondary {
+    background: #e935a7;
+}
+
+button.secondary:hover {
+    background: #aa3587;
+}
+
+button.danger {
+    background: #e53e3e;
+    padding: 4px 8px;
+    font-size: 12px;
+    margin-left: auto;
+}
+
+button.danger:hover {
+    background: #c53030;
+}
+
+#extractBtn {
+    background: #d53f8c;
+    font-weight: bold;
+}
+
+/* Queue Area */
+.staging-area {
+    background: #fff5f7;
+    border: 2px dashed #f687b3;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+}
+
+.staging-list {
+    list-style-type: none;
+    padding: 0;
+    margin: 0 0 15px 0;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.staging-list li {
+    display: flex;
+    align-items: center;
+    background: white;
+    padding: 8px 12px;
+    border: 1px solid #fbcfe8;
+    border-radius: 4px;
+    margin-bottom: 5px;
+    font-size: 14px;
+    word-break: break-all;
+    gap: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+/* Network Graph Container */
+#mynetwork {
+    width: 100%;
+    height: 600px;
+    border: 2px solid #fbcfe8;
+    border-radius: 8px;
+    background: #fff5f7;
+}
+
+#status {
+    margin-top: 10px;
+    font-weight: bold;
+    color: #d53f8c;
+}
