@@ -14,6 +14,7 @@ systemctl start docker
 usermod -aG docker azureuser
 
 # 3. Install Rust (Toolchain)
+sudo apt install -y curl build-essential
 sudo -u azureuser -i bash -c 'curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y'
 
 # 4. Install Azure CLI (to pull dataset from blob)
@@ -29,3 +30,16 @@ wget -O- https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor 
 echo deb [arch=amd64 signed-by=/usr/share/keyrings/vscode.gpg] https://packages.microsoft.com/repos/vscode stable main | sudo tee /etc/apt/sources.list.d/vscode.list
 sudo apt update
 sudo apt install code -y
+
+# 7. install nodejs & pnpm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.4/install.sh | bash
+export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+nvm install --lts
+
+curl -fsSL https://get.pnpm.io/install.sh | sh -
+export PNPM_HOME="/home/azureuser/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
