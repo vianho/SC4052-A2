@@ -5,6 +5,8 @@ on:
       - main
     paths:
       - "graphrag/frontend/**"
+      - ".github/workflows/deploy-frontend.yml"
+  workflow_dispatch:
 
 permissions:
   id-token: write
