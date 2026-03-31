@@ -145,7 +145,7 @@ body::before {
 }
 
 /* Inputs */
-input[type="text"] {
+.text-input {
     background: #1e1e1e;
     color: #ff69b4;
     border: 1px solid #ff69b450;
@@ -159,11 +159,11 @@ input[type="text"] {
     width: 100%;
 }
 
-input[type="text"]::placeholder {
+.text-input::placeholder {
     color: #ff69b445;
 }
 
-input[type="text"]:focus {
+.text-input:focus {
     border-color: #ff69b4;
     box-shadow: 0 0 12px #ff69b440;
 }
