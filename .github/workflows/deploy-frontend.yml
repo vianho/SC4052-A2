@@ -1,0 +1,60 @@
+name: Deploy Frontend
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "graphrag/frontend/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./graphrag/frontend
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "pnpm"
+          cache-dependency-path: "./graphrag/frontend/pnpm-lock.yaml"
+
+      - name: Install dependencies and build
+        run: |
+          pnpm install
+          pnpm run build
+        env:
+          BASE_API_URL: ${{ vars.BASE_API_URL }}
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "./graphrag/frontend/dist"
+
+  deploy:
+    needs: build
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: ubuntu0lates
+    steps:
+      - name: Deploy to github pages
+        id: deployment
+        uses: actions/deploy-pages@v4

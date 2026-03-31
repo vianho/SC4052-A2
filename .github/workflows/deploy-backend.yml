@@ -1,0 +1,43 @@
+name: Deploy graphrag backend to ACR
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  REGISTRY_NAME: graphragrs
+  IMAGE_NAME: graphrag
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./graphrag
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Login to Azure Container Registry
+        run: |
+          az acr login --name ${{ env.REGISTRY_NAME }}
+
+      - name: Build and Push Docker Image
+        run: |
+          LOGIN_SERVER="${{ env.REGISTRY_NAME }}.azurecr.io"
+          IMAGE_TAG=latest
+          FULL_IMAGE_NAME="$LOGIN_SERVER/${{ env.IMAGE_NAME }}"
+          docker build -t $FULL_IMAGE_NAME:latest -t $FULL_IMAGE_NAME:$IMAGE_TAG ./graphrag
+          docker push $FULL_IMAGE_NAME
