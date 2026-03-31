@@ -3,6 +3,8 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "graphrag/**"
   workflow_dispatch:
 
 permissions:
@@ -39,5 +41,5 @@ jobs:
           LOGIN_SERVER="${{ env.REGISTRY_NAME }}.azurecr.io"
           IMAGE_TAG=latest
           FULL_IMAGE_NAME="$LOGIN_SERVER/${{ env.IMAGE_NAME }}"
-          docker build -t $FULL_IMAGE_NAME:latest -t $FULL_IMAGE_NAME:$IMAGE_TAG ./graphrag
+          docker build -t $FULL_IMAGE_NAME:latest -t $FULL_IMAGE_NAME:$IMAGE_TAG .
           docker push $FULL_IMAGE_NAME
