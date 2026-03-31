@@ -145,6 +145,7 @@ body::before {
 }
 
 /* Inputs */
+/* purgecss start ignore */
 .text-input {
     background: #1e1e1e;
     color: #ff69b4;
@@ -167,6 +168,8 @@ body::before {
     border-color: #ff69b4;
     box-shadow: 0 0 12px #ff69b440;
 }
+
+/* purgecss end ignore */
 
 #questionInput {
     color: #90ee90;
