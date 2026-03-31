@@ -5,6 +5,8 @@ on:
       - main
     paths:
       - "graphrag/**"
+      - ".github/workflows/deploy-backend.yml"
+      - "!graphrag/frontend/**"
   workflow_dispatch:
 
 permissions:
