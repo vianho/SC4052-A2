@@ -1,18 +1,11 @@
+import * as crypto from "crypto";
+
 import { Construct } from "constructs";
 import { App, TerraformStack } from "cdktn";
 import {
   AzapiProvider,
-  NetworkInterface,
-  NetworkSecurityGroup,
   ResourceGroup,
-  StorageAccount,
-  Subnet,
-  VirtualMachine,
-  VirtualNetwork,
 } from "@microsoft/terraform-cdk-constructs";
-import * as fs from "fs";
-import * as path from "path";
-import * as crypto from "crypto";
 
 import { RoleAssignment } from "@cdktn/provider-azurerm/lib/role-assignment";
 import { AzurermProvider } from "@cdktn/provider-azurerm/lib/provider";
@@ -21,14 +14,14 @@ import { ContainerApp } from "@cdktn/provider-azurerm/lib/container-app";
 import { ContainerRegistry } from "@cdktn/provider-azurerm/lib/container-registry";
 import { KeyVault } from "@cdktn/provider-azurerm/lib/key-vault";
 import { KeyVaultSecret } from "@cdktn/provider-azurerm/lib/key-vault-secret";
-import { CloudflareProvider } from "@cdktn/provider-cloudflare/lib/provider";
-import { ZeroTrustTunnelCloudflared } from "@cdktn/provider-cloudflare/lib/zero-trust-tunnel-cloudflared";
-import { ZeroTrustTunnelCloudflaredConfigA } from "@cdktn/provider-cloudflare/lib/zero-trust-tunnel-cloudflared-config";
-import { dnsRecord } from "@cdktn/provider-cloudflare";
-import { DataCloudflareZeroTrustTunnelCloudflaredToken } from "@cdktn/provider-cloudflare/lib/data-cloudflare-zero-trust-tunnel-cloudflared-token";
 import { ResourceProviderRegistration } from "@cdktn/provider-azurerm/lib/resource-provider-registration";
 import { UserAssignedIdentity } from "@cdktn/provider-azurerm/lib/user-assigned-identity";
 import { KeyVaultAccessPolicyA } from "@cdktn/provider-azurerm/lib/key-vault-access-policy";
+
+import { CloudflareProvider } from "@cdktn/provider-cloudflare/lib/provider";
+import { dnsRecord, zeroTrustTunnelCloudflared, zeroTrustTunnelCloudflaredConfig } from "@cdktn/provider-cloudflare";
+import { DataCloudflareZeroTrustTunnelCloudflaredToken } from "@cdktn/provider-cloudflare/lib/data-cloudflare-zero-trust-tunnel-cloudflared-token";
+
 class PagerankStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
@@ -51,11 +44,6 @@ class PagerankStack extends TerraformStack {
     });
     new CloudflareProvider(this, "Cloudflare", {});
 
-    const sshPublicKey = process.env.SSH_PUBLIC_KEY || "";
-    if (!sshPublicKey) {
-      throw new Error("SSH_PUBLIC_KEY environment variable is not set");
-    }
-
     // 1. create a resource group
     const rg = new ResourceGroup(this, "rg", {
       name: "pagerank-rg",
@@ -66,17 +54,7 @@ class PagerankStack extends TerraformStack {
       name: "Microsoft.App",
     });
 
-
-    // 2. setup storage
-    const storageAccount = new StorageAccount(this, "storage", {
-      name: "sc4052assignment2",
-      resourceGroupId: rg.id,
-      location: rg.location,
-      sku: { name: "Standard_LRS" },
-    });
-
-
-    // Create keyvault
+    // 2. Create keyvault
     const kv = new KeyVault(this, "kv", {
       name: "graphrag-app-kv",
       resourceGroupName: rg.name,
@@ -91,123 +69,9 @@ class PagerankStack extends TerraformStack {
       keyVaultId: kv.id,
     });
 
-    // 3. setup network
-    const vnet = new VirtualNetwork(this, "vnet", {
-      name: "vnet",
-      resourceGroupId: rg.id,
-      location: rg.location,
-      addressSpace: {
-        addressPrefixes: ["10.0.0.0/16"],
-      }
-    });
-
-    const snet1 = new Subnet(this, "snet1", {
-      // note: forgot to change the name after selecting a different location :(
-      name: "snet-app-mywest-01",
-      virtualNetworkName: vnet.name,
-      virtualNetworkId: vnet.id,
-      resourceGroupId: rg.id,
-      addressPrefix: "10.0.1.0/24",
-    });
-
-    const nsg = new NetworkSecurityGroup(this, "nsg", {
-      name: "sc4052-nsg-22",
-      resourceGroupId: rg.id,
-      location: rg.location,
-      securityRules: [
-        {
-          name: "SSH",
-          properties: {
-            priority: 100,
-            direction: "Inbound",
-            description: "Allow SSH from anywhere",
-            access: "Allow",
-            protocol: "Tcp",
-            sourcePortRange: "*",
-            destinationPortRange: "22",
-            sourceAddressPrefix: "*",
-            destinationAddressPrefix: "*",
-          },
-        },
-      ],
-    });
-
-    const nic = new NetworkInterface(this, "nic", {
-      name: "sc4502-2526a2-nic",
-      location: rg.location,
-      resourceGroupId: rg.id,
-      networkSecurityGroup: {
-        id: nsg.id,
-      },
-      ipConfigurations: [{
-        name: "ipconfig1",
-        subnet: { id: snet1.id },
-        privateIPAllocationMethod: "Dynamic",
-        primary: true,
-      }],
-    });
-
-    // pre-4. read cloud-init script and replace placeholder with actual storage account name
-    const scriptPath = path.resolve(__dirname, "scripts", "cloud-init.sh");
-    const rawScript = fs.readFileSync(scriptPath, "utf-8");
-    const userData = rawScript.replace("__STORAGE_ACCOUNT_NAME__", storageAccount.name);
-
-    // 4. create vm
-    new VirtualMachine(this, "vm", {
-      name: "sc4052-2526a2",
-      location: rg.location,
-      resourceGroupId: rg.id,
-      hardwareProfile: {
-        vmSize: "Standard_B2als_v2",
-      },
-      storageProfile: {
-        imageReference: {
-          publisher: "Canonical",
-          offer: "ubuntu-24_04-lts",
-          sku: "minimal",
-          version: "latest"
-        },
-        osDisk: {
-          createOption: "FromImage",
-          managedDisk: {
-            storageAccountType: "Standard_LRS",
-          },
-        },
-      },
-      osProfile: {
-        computerName: "sc4052",
-        adminUsername: "azureuser",
-        linuxConfiguration: {
-          disablePasswordAuthentication: true,
-          ssh: {
-            publicKeys: [
-              {
-                path: "/home/azureuser/.ssh/authorized_keys",
-                keyData: sshPublicKey
-              },
-            ],
-          },
-        },
-        customData: Buffer.from(userData).toString('base64'),
-      },
-      networkProfile: {
-        networkInterfaces: [
-          {
-            id: nic.id,
-          },
-        ],
-      },
-      // no redundancy needed to save credits
-      zones: ["1"],
-      // Assign Managed Identity to access Blob Storage
-      identity: {
-        type: "SystemAssigned"
-      }
-    });
-
-    // 6. Cloudflare tunnel
+    // 3. Cloudflare tunnel
     const tunnelSecret = crypto.randomBytes(32).toString("base64");
-    const tunnel = new ZeroTrustTunnelCloudflared(this, "cf-tunnel", {
+    const tunnel = new zeroTrustTunnelCloudflared.ZeroTrustTunnelCloudflared(this, "cf-tunnel", {
       accountId: cloudflareAccountId,
       name: "rust-azure-tunnel",
       tunnelSecret: tunnelSecret,
@@ -217,7 +81,7 @@ class PagerankStack extends TerraformStack {
       }
     });
 
-    new ZeroTrustTunnelCloudflaredConfigA(this, "cf-tunnel-config", {
+    new zeroTrustTunnelCloudflaredConfig.ZeroTrustTunnelCloudflaredConfigA(this, "cf-tunnel-config", {
       accountId: cloudflareAccountId,
       tunnelId: tunnel.id,
       config: {
@@ -233,7 +97,7 @@ class PagerankStack extends TerraformStack {
       },
     });
 
-    // Create the DNS Record pointing apiDomainName to the tunnel
+    // 4. Create the DNS Record pointing apiDomainName to the tunnel
     new dnsRecord.DnsRecord(this, "cf-dns-record", {
       zoneId: cloudflareZoneId,
       name: apiDomainName.split(".")[0],
@@ -243,7 +107,7 @@ class PagerankStack extends TerraformStack {
       proxied: true,
     });
 
-    // grab tunnel token from data and store it in keyvault
+    // 5. grab tunnel token from data and store it in keyvault
     const tunnelToken = new DataCloudflareZeroTrustTunnelCloudflaredToken(this, "tunnelToken", {
       accountId: cloudflareAccountId,
       tunnelId: tunnel.id,
@@ -255,7 +119,7 @@ class PagerankStack extends TerraformStack {
       keyVaultId: kv.id,
     });
 
-    // Create container apps for rust app
+    // 6. Create azure container app for GraphRAG
     const acr = new ContainerRegistry(this, "acr", {
       name: "graphragrs",
       resourceGroupName: rg.name,
