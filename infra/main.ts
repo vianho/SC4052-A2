@@ -5,7 +5,6 @@ import {
   NetworkInterface,
   NetworkSecurityGroup,
   ResourceGroup,
-  RoleAssignment,
   StorageAccount,
   Subnet,
   VirtualMachine,
@@ -15,6 +14,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 
+import { RoleAssignment } from "@cdktn/provider-azurerm/lib/role-assignment";
 import { AzurermProvider } from "@cdktn/provider-azurerm/lib/provider";
 import { ContainerAppEnvironment } from "@cdktn/provider-azurerm/lib/container-app-environment";
 import { ContainerApp } from "@cdktn/provider-azurerm/lib/container-app";
@@ -27,6 +27,8 @@ import { ZeroTrustTunnelCloudflaredConfigA } from "@cdktn/provider-cloudflare/li
 import { dnsRecord } from "@cdktn/provider-cloudflare";
 import { DataCloudflareZeroTrustTunnelCloudflaredToken } from "@cdktn/provider-cloudflare/lib/data-cloudflare-zero-trust-tunnel-cloudflared-token";
 import { ResourceProviderRegistration } from "@cdktn/provider-azurerm/lib/resource-provider-registration";
+import { UserAssignedIdentity } from "@cdktn/provider-azurerm/lib/user-assigned-identity";
+import { KeyVaultAccessPolicyA } from "@cdktn/provider-azurerm/lib/key-vault-access-policy";
 class PagerankStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
@@ -266,15 +268,45 @@ class PagerankStack extends TerraformStack {
       name: "graphrag-ca-env",
       resourceGroupName: rg.name,
       location: locationCode,
+      workloadProfile: [{
+        maximumCount: 0,
+        minimumCount: 0,
+        name: "Consumption",
+        workloadProfileType: "Consumption",
+      }],
       dependsOn: [appProvider],
     });
 
-    const graphragApp = new ContainerApp(this, "graphragApp", {
+    const appIdentity = new UserAssignedIdentity(this, "app-identity", {
+      name: "graphragapp-identity",
+      resourceGroupName: rg.name,
+      location: locationCode,
+    });
+
+    const acrPullRole = new RoleAssignment(this, "acrPull", {
+      roleDefinitionId: "/subscriptions/7d270f45-e4a4-435c-bb7c-40d93fa07ed5/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d",
+      principalId: appIdentity.principalId,
+      scope: acr.id,
+      description: "Allow ACR pull for container app",
+    });
+
+    const kvPolicy = new KeyVaultAccessPolicyA(this, "kv-app-policy", {
+      keyVaultId: kv.id,
+      tenantId: azureTenantId,
+      objectId: appIdentity.principalId,
+      secretPermissions: ["Get", "List"],
+    });
+
+    new ContainerApp(this, "graphragApp", {
       name: "graphragrs",
       resourceGroupName: rg.name,
       containerAppEnvironmentId: graphragCAEnv.id,
       revisionMode: "Single",
-      identity: { type: "SystemAssigned" },
+      identity: {
+        type: "SystemAssigned, UserAssigned",
+        identityIds: [appIdentity.id],
+      },
+      workloadProfileName: "Consumption",
       registry: [
         {
           server: acr.loginServer,
@@ -282,12 +314,12 @@ class PagerankStack extends TerraformStack {
         }
       ],
       template: {
-        minReplicas: 0,
+        minReplicas: 1,
         maxReplicas: 1,
         container: [
           {
             name: "graphragrs",
-            image: `${acr.loginServer}/${acr.name}:latest`,
+            image: `${acr.loginServer}/graphrag:latest`,
             cpu: 0.25,
             memory: "0.5Gi",
             env: [
@@ -306,7 +338,7 @@ class PagerankStack extends TerraformStack {
           {
             name: "cloudflared-tunnel",
             image: "cloudflare/cloudflared:latest",
-            command: ["tunnel", "--no-autoupdate", "run"],
+            command: ["/usr/local/bin/cloudflared", "tunnel", "--no-autoupdate", "run"],
             cpu: 0.25,
             memory: "0.5Gi",
             env: [
@@ -326,32 +358,17 @@ class PagerankStack extends TerraformStack {
         {
           name: "gemini-api-key",
           keyVaultSecretId: geminiKey.id,
-          identity: "System",
+          identity: appIdentity.id,
         },
         {
           name: "cloudflared-tunnel-token",
           keyVaultSecretId: cfTokenSecret.id,
-          identity: "System"
+          identity: appIdentity.id,
         }
       ],
-      lifecycle: {
-        ignoreChanges: ["secret"],
-      }
+      dependsOn: [acrPullRole, kvPolicy],
     });
 
-    new RoleAssignment(this, "acrPull", {
-      roleDefinitionId: "/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d",
-      principalId: graphragApp.identity.principalId,
-      scope: acr.id,
-      description: "Allow ACR pull for container app",
-    });
-
-    new RoleAssignment(this, "kvRead", {
-      roleDefinitionId: "/providers/Microsoft.Authorization/roleDefinitions/21090545-7ca7-4776-b22c-e363652d74d2",
-      principalId: graphragApp.identity.principalId,
-      scope: kv.id,
-      description: "Allow read access to keyvault for container",
-    })
   }
 }
 
