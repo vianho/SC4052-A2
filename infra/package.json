@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@cdktn/provider-azurerm": "15.5.0",
+    "@cdktn/provider-cloudflare": "^14.1.0",
     "@microsoft/terraform-cdk-constructs": "^1.9.0",
     "cdktn": "^0.22.0",
     "constructs": "^10.5.1"

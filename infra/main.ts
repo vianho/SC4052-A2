@@ -13,9 +13,20 @@ import {
 } from "@microsoft/terraform-cdk-constructs";
 import * as fs from "fs";
 import * as path from "path";
-// import { StorageContainer } from "@cdktn/provider-azurerm/lib/storage-container";
-// import { AzurermProvider } from "@cdktn/provider-azurerm/lib/provider";
+import * as crypto from "crypto";
 
+import { AzurermProvider } from "@cdktn/provider-azurerm/lib/provider";
+import { ContainerAppEnvironment } from "@cdktn/provider-azurerm/lib/container-app-environment";
+import { ContainerApp } from "@cdktn/provider-azurerm/lib/container-app";
+import { ContainerRegistry } from "@cdktn/provider-azurerm/lib/container-registry";
+import { KeyVault } from "@cdktn/provider-azurerm/lib/key-vault";
+import { KeyVaultSecret } from "@cdktn/provider-azurerm/lib/key-vault-secret";
+import { CloudflareProvider } from "@cdktn/provider-cloudflare/lib/provider";
+import { ZeroTrustTunnelCloudflared } from "@cdktn/provider-cloudflare/lib/zero-trust-tunnel-cloudflared";
+import { ZeroTrustTunnelCloudflaredConfigA } from "@cdktn/provider-cloudflare/lib/zero-trust-tunnel-cloudflared-config";
+import { dnsRecord } from "@cdktn/provider-cloudflare";
+import { DataCloudflareZeroTrustTunnelCloudflaredToken } from "@cdktn/provider-cloudflare/lib/data-cloudflare-zero-trust-tunnel-cloudflared-token";
+import { ResourceProviderRegistration } from "@cdktn/provider-azurerm/lib/resource-provider-registration";
 class PagerankStack extends TerraformStack {
   constructor(scope: Construct, id: string) {
     super(scope, id);
@@ -25,13 +36,18 @@ class PagerankStack extends TerraformStack {
       project: "pagerank",
       managed_by: "cdktn",
     }
+    const cloudflareAccountId = process.env.CLOUDFLARE_ACCOUNT_ID || "";
+    const azureTenantId = process.env.AZURE_TENANT_ID || "";
+    const cloudflareZoneId = process.env.CLOUDFLARE_ZONE_ID || "";
+    const apiDomainName = process.env.API_DOMAIN_NAME || "";
 
-    // new AzurermProvider(this, "Azurerm", {
-    //   features: undefined
-    // });
+    new AzurermProvider(this, "Azurerm", {
+      features: [{}],
+    });
     new AzapiProvider(this, "AzApi", {
       defaultTags: tags,
     });
+    new CloudflareProvider(this, "Cloudflare", {});
 
     const sshPublicKey = process.env.SSH_PUBLIC_KEY || "";
     if (!sshPublicKey) {
@@ -44,6 +60,11 @@ class PagerankStack extends TerraformStack {
       location: locationCode,
     });
 
+    const appProvider = new ResourceProviderRegistration(this, "register-microsoft-app", {
+      name: "Microsoft.App",
+    });
+
+
     // 2. setup storage
     const storageAccount = new StorageAccount(this, "storage", {
       name: "sc4052assignment2",
@@ -52,11 +73,21 @@ class PagerankStack extends TerraformStack {
       sku: { name: "Standard_LRS" },
     });
 
-    // new StorageContainer(this, "datasetContainer", {
-    //   name: "pagerank-dataset",
-    //   storageAccountName: storageAccount.name,
-    //   containerAccessType: "private",
-    // });
+
+    // Create keyvault
+    const kv = new KeyVault(this, "kv", {
+      name: "graphrag-app-kv",
+      resourceGroupName: rg.name,
+      location: locationCode,
+      skuName: "standard",
+      tenantId: azureTenantId,
+    });
+
+    const geminiKey = new KeyVaultSecret(this, "geminiKey", {
+      name: "GEMINI-API-KEY",
+      value: process.env.GEMINI_API_KEY,
+      keyVaultId: kv.id,
+    });
 
     // 3. setup network
     const vnet = new VirtualNetwork(this, "vnet", {
@@ -69,6 +100,7 @@ class PagerankStack extends TerraformStack {
     });
 
     const snet1 = new Subnet(this, "snet1", {
+      // note: forgot to change the name after selecting a different location :(
       name: "snet-app-mywest-01",
       virtualNetworkName: vnet.name,
       virtualNetworkId: vnet.id,
@@ -119,7 +151,7 @@ class PagerankStack extends TerraformStack {
     const userData = rawScript.replace("__STORAGE_ACCOUNT_NAME__", storageAccount.name);
 
     // 4. create vm
-    const vm = new VirtualMachine(this, "vm", {
+    new VirtualMachine(this, "vm", {
       name: "sc4052-2526a2",
       location: rg.location,
       resourceGroupId: rg.id,
@@ -171,15 +203,155 @@ class PagerankStack extends TerraformStack {
       }
     });
 
-    // 5. assign blob storage data contributor role to vm
-    new RoleAssignment(this, "vmStorageAccess", {
-      name: 'sc4052-2526a2-storage-access',
-      roleDefinitionId: "/providers/Microsoft.Authorization/roleDefinitions/ba92f5b4-2d11-453d-a403-e96b0029c9fe",
-      principalId: vm.vmId,
-      scope: storageAccount.id,
-      principalType: "ServicePrincipal",
-      description: "Allow R/W access to Blob Storage for VM",
+    // 6. Cloudflare tunnel
+    const tunnelSecret = crypto.randomBytes(32).toString("base64");
+    const tunnel = new ZeroTrustTunnelCloudflared(this, "cf-tunnel", {
+      accountId: cloudflareAccountId,
+      name: "rust-azure-tunnel",
+      tunnelSecret: tunnelSecret,
+      configSrc: "cloudflare",
+      lifecycle: {
+        ignoreChanges: ["tunnel_secret"],
+      }
     });
+
+    new ZeroTrustTunnelCloudflaredConfigA(this, "cf-tunnel-config", {
+      accountId: cloudflareAccountId,
+      tunnelId: tunnel.id,
+      config: {
+        ingress: [
+          {
+            hostname: apiDomainName,
+            service: "http://localhost:3000",
+          },
+          {
+            service: "http_status:404",
+          },
+        ],
+      },
+    });
+
+    // Create the DNS Record pointing apiDomainName to the tunnel
+    new dnsRecord.DnsRecord(this, "cf-dns-record", {
+      zoneId: cloudflareZoneId,
+      name: apiDomainName.split(".")[0],
+      content: `${tunnel.id}.cfargotunnel.com`,
+      type: "CNAME",
+      ttl: 1,
+      proxied: true,
+    });
+
+    // grab tunnel token from data and store it in keyvault
+    const tunnelToken = new DataCloudflareZeroTrustTunnelCloudflaredToken(this, "tunnelToken", {
+      accountId: cloudflareAccountId,
+      tunnelId: tunnel.id,
+    })
+
+    const cfTokenSecret = new KeyVaultSecret(this, "tunnel-token-secret", {
+      name: "CLOUDFLARE-TUNNEL-TOKEN",
+      value: tunnelToken.token,
+      keyVaultId: kv.id,
+    });
+
+    // Create container apps for rust app
+    const acr = new ContainerRegistry(this, "acr", {
+      name: "graphragrs",
+      resourceGroupName: rg.name,
+      location: locationCode,
+      sku: "Basic",
+      adminEnabled: false,
+    });
+
+    const graphragCAEnv = new ContainerAppEnvironment(this, "graphragCAEnv", {
+      name: "graphrag-ca-env",
+      resourceGroupName: rg.name,
+      location: locationCode,
+      dependsOn: [appProvider],
+    });
+
+    const graphragApp = new ContainerApp(this, "graphragApp", {
+      name: "graphragrs",
+      resourceGroupName: rg.name,
+      containerAppEnvironmentId: graphragCAEnv.id,
+      revisionMode: "Single",
+      identity: { type: "SystemAssigned" },
+      registry: [
+        {
+          server: acr.loginServer,
+          identity: "System",
+        }
+      ],
+      template: {
+        minReplicas: 0,
+        maxReplicas: 1,
+        container: [
+          {
+            name: "graphragrs",
+            image: `${acr.loginServer}/${acr.name}:latest`,
+            cpu: 0.25,
+            memory: "0.5Gi",
+            env: [
+              {
+                name: "GEMINI_API_KEY",
+                secretName: "gemini-api-key",
+              },
+            ],
+            readinessProbe: [{
+              transport: "HTTP",
+              port: 3000,
+              path: "/api",
+            }],
+          },
+          // cloudflare tunnel sidecar
+          {
+            name: "cloudflared-tunnel",
+            image: "cloudflare/cloudflared:latest",
+            command: ["tunnel", "--no-autoupdate", "run"],
+            cpu: 0.25,
+            memory: "0.5Gi",
+            env: [
+              {
+                name: "TUNNEL_TOKEN",
+                secretName: "cloudflared-tunnel-token",
+              },
+            ],
+          },
+        ],
+      },
+      ingress: {
+        targetPort: 3000,
+        trafficWeight: [{ percentage: 100, latestRevision: true }],
+      },
+      secret: [
+        {
+          name: "gemini-api-key",
+          keyVaultSecretId: geminiKey.id,
+          identity: "System",
+        },
+        {
+          name: "cloudflared-tunnel-token",
+          keyVaultSecretId: cfTokenSecret.id,
+          identity: "System"
+        }
+      ],
+      lifecycle: {
+        ignoreChanges: ["secret"],
+      }
+    });
+
+    new RoleAssignment(this, "acrPull", {
+      roleDefinitionId: "/providers/Microsoft.Authorization/roleDefinitions/7f951dda-4ed3-4680-a7ca-43fe172d538d",
+      principalId: graphragApp.identity.principalId,
+      scope: acr.id,
+      description: "Allow ACR pull for container app",
+    });
+
+    new RoleAssignment(this, "kvRead", {
+      roleDefinitionId: "/providers/Microsoft.Authorization/roleDefinitions/21090545-7ca7-4776-b22c-e363652d74d2",
+      principalId: graphragApp.identity.principalId,
+      scope: kv.id,
+      description: "Allow read access to keyvault for container",
+    })
   }
 }
 

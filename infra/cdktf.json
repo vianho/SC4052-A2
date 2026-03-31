@@ -4,8 +4,9 @@
   "projectId": "894675f9-a891-41f4-b55f-11504cc74608",
   "sendCrashReports": "true",
   "terraformProviders": [
-    "azurerm@~>4.65",
-    "azure/azapi@~>2.8"
+    "hashicorp/azurerm@~>4.0",
+    "azure/azapi@~>2.8",
+    "cloudflare/cloudflare@~>5.0"
   ],
   "terraformModules": [],
   "context": {}
